@@ -44,14 +44,18 @@ class Phone(Field):
 
 class Birthday(Field):
     def __init__(self, value):
-        try:
-            dt = datetime.strptime(value, "%d.%m.%Y").date()
-            self.value = dt
-        except Exception:
-            raise ValueError("Invalid date format. Use DD.MM.YYYY")
+        # Store birthday as a string in format DD.MM.YYYY (requirement)
+        if isinstance(value, str):
+            try:
+                datetime.strptime(value, "%d.%m.%Y")  # validate format
+                self.value = value
+            except Exception:
+                raise ValueError("Invalid date format. Use DD.MM.YYYY")
+        else:
+            raise ValueError("Birthday must be a string in format DD.MM.YYYY")
 
     def __str__(self):
-        return self.value.strftime("%d.%m.%Y")
+        return self.value
 
 
 class Record:
@@ -115,10 +119,16 @@ class AddressBook(UserDict):
             if not rec.birthday:
                 continue
 
-            bday = rec.birthday.value.replace(year=today.year)
+            # rec.birthday.value is string 'DD.MM.YYYY' — parse to date for math
+            try:
+                bday_date = datetime.strptime(rec.birthday.value, "%d.%m.%Y").date()
+            except Exception:
+                continue
+
+            bday = bday_date.replace(year=today.year)
 
             if bday < today:
-                bday = rec.birthday.value.replace(year=today.year + 1)
+                bday = bday_date.replace(year=today.year + 1)
 
             if today <= bday <= limit:
                 greeting = bday
@@ -137,13 +147,22 @@ def input_error(func):
         try:
             return func(*args, **kwargs)
         except ValueError as e:
-            return f"ValueError: {e}"
+            msg = str(e)
+            if (
+                "not enough values to unpack" in msg
+                or "too many values to unpack" in msg
+            ):
+                return "Not enough or too many arguments provided for this command."
+            return f"Invalid value: {msg}"
+        except IndexError:
+            return "Not enough arguments provided for the command."
         except KeyError:
             return "Contact not found."
-        except IndexError:
-            return "Not enough arguments."
+        except AttributeError:
+            # e.g., when record is None and code accesses its attributes
+            return "Contact not found."
         except Exception as e:
-            return f"Error: {e}"
+            return f"An unexpected error occurred: {e}"
 
     return inner
 
@@ -220,6 +239,8 @@ def birthdays(args, book):
 
 def parse_input(text):
     parts = text.strip().split()
+    if not parts:
+        return "", []
     return parts[0].lower(), parts[1:]
 
 
